@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { scrapeSchedule } from '@/lib/scraper';
 
-export const preferredRegion = 'icn1';
+export const preferredRegion = ['icn1', 'sin1', 'hnd1'];
 
 const FAKERS_CLUB_IDX = '13588';
 

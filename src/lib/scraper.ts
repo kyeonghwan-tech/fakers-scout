@@ -4,17 +4,32 @@ import { HitterStats, PitcherStats, Player, GameSchedule } from '@/types/basebal
 const BASE_URL = 'https://www.gameone.kr';
 
 async function fetchPage(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
-      'Referer': 'https://www.gameone.kr/',
-    },
-    next: { revalidate: 300 },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
-  return res.text();
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.gameone.kr/',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Cache-Control': 'max-age=0',
+      },
+      signal: AbortSignal.timeout(20000),
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} fetching ${url}`);
+    return res.text();
+  } catch (err) {
+    const detail = err instanceof Error
+      ? `${err.name}: ${err.message}${(err as NodeJS.ErrnoException).code ? ` (${(err as NodeJS.ErrnoException).code})` : ''}`
+      : String(err);
+    throw new Error(`fetch 실패 [${url}] → ${detail}`);
+  }
 }
 
 function pf(val: string | undefined): number {
