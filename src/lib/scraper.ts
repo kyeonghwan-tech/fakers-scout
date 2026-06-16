@@ -4,25 +4,44 @@ import { HitterStats, PitcherStats, Player, GameSchedule } from '@/types/basebal
 
 const BASE_URL = 'https://www.gameone.kr';
 
-// gameone.kr는 DH 키가 너무 작아 Node.js 기본 TLS가 연결을 거부함
-// DHE 암호화 제외한 커스텀 Agent로 우회
-const agent = new Agent({
+// gameone.kr: DH 키가 작아 Node.js 기본 TLS가 거부 → DHE 제외 커스텀 Agent
+const tlsAgent = new Agent({
   connect: {
     ciphers: 'DEFAULT:!DH:!DHE:!EDH:!EXPORT',
     honorCipherOrder: true,
   },
 });
 
-async function fetchPage(url: string): Promise<string> {
+const BASE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
+  'Referer': 'https://www.gameone.kr/',
+};
+
+// gameone.kr는 세션 쿠키 없이 랭킹 페이지 접근 시 메인페이지로 리다이렉트함
+// 클럽 메인 페이지를 먼저 요청해서 PHPSESSID를 받아야 함
+async function getSessionCookie(clubIdx: string): Promise<string> {
+  const res = await fetch(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`, {
+    // @ts-ignore
+    dispatcher: tlsAgent,
+    headers: BASE_HEADERS,
+    redirect: 'follow',
+    signal: AbortSignal.timeout(15000),
+  });
+  const setCookie = res.headers.get('set-cookie') ?? '';
+  const match = setCookie.match(/PHPSESSID=([^;]+)/);
+  return match ? `PHPSESSID=${match[1]}` : '';
+}
+
+async function fetchPage(url: string, cookie?: string): Promise<string> {
   try {
     const res = await fetch(url, {
-      // @ts-ignore — undici dispatcher는 Node.js fetch 확장 옵션
-      dispatcher: agent,
+      // @ts-ignore
+      dispatcher: tlsAgent,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
-        'Referer': 'https://www.gameone.kr/',
+        ...BASE_HEADERS,
+        ...(cookie ? { Cookie: cookie } : {}),
       },
       signal: AbortSignal.timeout(20000),
       next: { revalidate: 300 },
@@ -35,6 +54,12 @@ async function fetchPage(url: string): Promise<string> {
     const detail = err instanceof Error ? `${err.name}: ${err.message}${causeInfo}` : String(err);
     throw new Error(`fetch 실패 [${url}] → ${detail}`);
   }
+}
+
+// 세션 쿠키를 포함해 랭킹 페이지를 가져오는 헬퍼
+async function fetchRankingPage(path: string, clubIdx: string): Promise<string> {
+  const cookie = await getSessionCookie(clubIdx);
+  return fetchPage(`${BASE_URL}${path}?club_idx=${clubIdx}`, cookie);
 }
 
 function pf(val: string | undefined): number {
@@ -64,7 +89,7 @@ function parseName(raw: string): { name: string; number: string } {
  * [27]=OPS [28]=BB/K [29]=장타/안타
  */
 export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
-  const html = await fetchPage(`${BASE_URL}/club/info/ranking/hitter?club_idx=${clubIdx}`);
+  const html = await fetchRankingPage('/club/info/ranking/hitter', clubIdx);
   const $ = cheerio.load(html);
   const hitters: HitterStats[] = [];
 
@@ -143,7 +168,7 @@ export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
  * [23]=실점 [24]=자책점 [25]=WHIP [26]=피안타율 [27]=탈삼진율(K/9)
  */
 export async function scrapePitchers(clubIdx: string): Promise<PitcherStats[]> {
-  const html = await fetchPage(`${BASE_URL}/club/info/ranking/pitcher?club_idx=${clubIdx}`);
+  const html = await fetchRankingPage('/club/info/ranking/pitcher', clubIdx);
   const $ = cheerio.load(html);
   const pitchers: PitcherStats[] = [];
 
