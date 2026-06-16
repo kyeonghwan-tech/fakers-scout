@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { scrapeSchedule } from '@/lib/scraper';
 
+export const preferredRegion = 'icn1';
+
 const FAKERS_CLUB_IDX = '13588';
 
 export async function GET() {
