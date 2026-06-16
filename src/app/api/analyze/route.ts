@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeHitters, scrapePitchers, scrapeSchedule, scrapeTeamName, searchClubIdx } from '@/lib/scraper';
+import { scrapeHitters, scrapePitchers, scrapeSchedule, scrapeTeamName, searchClubIdx, getLoginCookie } from '@/lib/scraper';
 
 export const preferredRegion = ['icn1', 'sin1', 'hnd1'];
 export const maxDuration = 60; // Vercel Pro: 최대 60초
@@ -22,10 +22,13 @@ export async function GET(req: NextRequest) {
   const gameIndex = gameIndexParam !== null ? parseInt(gameIndexParam, 10) : 0;
 
   try {
-    // Fakers 데이터 병렬 수집
+    // 로그인 1회 → 쿠키를 모든 랭킹 요청에 공유
+    const cookie = await getLoginCookie();
+
+    // Fakers 데이터 + 일정 병렬 수집
     const [fakersHitters, fakersPitchers, fakersSchedule] = await Promise.all([
-      scrapeHitters(FAKERS_CLUB_IDX),
-      scrapePitchers(FAKERS_CLUB_IDX),
+      scrapeHitters(FAKERS_CLUB_IDX, cookie),
+      scrapePitchers(FAKERS_CLUB_IDX, cookie),
       scrapeSchedule(FAKERS_CLUB_IDX),
     ]);
 
@@ -44,16 +47,16 @@ export async function GET(req: NextRequest) {
 
     const targetGame = fakersSchedule[Math.min(gameIndex, fakersSchedule.length - 1)];
 
-    // 상대팀 club_idx 확보: 이름 검색
+    // 상대팀 club_idx 확보
     let oppIdx = targetGame.opponentClubIdx;
     if (!oppIdx && targetGame.opponent) {
       oppIdx = await searchClubIdx(targetGame.opponent);
     }
 
-    // 상대팀 데이터 수집 (club_idx 없으면 빈 배열)
+    // 상대팀 데이터 (같은 로그인 쿠키 재사용)
     const [oppHitters, oppPitchers, oppName, oppSchedule] = await Promise.all([
-      oppIdx ? scrapeHitters(oppIdx).catch(() => []) : Promise.resolve([]),
-      oppIdx ? scrapePitchers(oppIdx).catch(() => []) : Promise.resolve([]),
+      oppIdx ? scrapeHitters(oppIdx, cookie).catch(() => []) : Promise.resolve([]),
+      oppIdx ? scrapePitchers(oppIdx, cookie).catch(() => []) : Promise.resolve([]),
       oppIdx ? scrapeTeamName(oppIdx).catch(() => targetGame.opponent) : Promise.resolve(targetGame.opponent || '상대팀'),
       oppIdx ? scrapeSchedule(oppIdx).catch(() => []) : Promise.resolve([]),
     ]);
