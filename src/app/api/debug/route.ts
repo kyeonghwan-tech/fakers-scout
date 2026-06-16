@@ -14,60 +14,57 @@ const HEADERS = {
   'Accept-Language': 'ko-KR,ko;q=0.9',
 };
 
-export async function GET() {
-  const userId = process.env.GAMEONE_USER_ID ?? '';
-  const passwd = process.env.GAMEONE_PASSWD ?? '';
-
-  // 1) 로그인 페이지 → CSRF 토큰
+async function login(): Promise<string> {
   const lpRes = await fetch(`${BASE}/member/login`, {
     // @ts-ignore
     dispatcher: agent, headers: HEADERS, signal: AbortSignal.timeout(15000),
   });
   const lpHtml = await lpRes.text();
-  const tokenMatch = lpHtml.match(/name="login_token"\s+value="([^"]+)"/);
-  const loginToken = tokenMatch?.[1] ?? '';
+  const loginToken = lpHtml.match(/name="login_token"\s+value="([^"]+)"/)?.[1] ?? '';
   const sess0 = lpRes.headers.get('set-cookie')?.match(/PHPSESSID=([^;]+)/)?.[1] ?? '';
 
-  // 2) 로그인 POST
   const body = new URLSearchParams({
     login_token: loginToken, return_url: 'https%3A%2F%2Fwww.gameone.kr%2F',
-    isPop: 'F', user_id: userId, passwd, save_id: '',
+    isPop: 'F', user_id: process.env.GAMEONE_USER_ID ?? '',
+    passwd: process.env.GAMEONE_PASSWD ?? '', save_id: '',
   });
   const loginRes = await fetch(`${BASE}/member/exec/login`, {
     method: 'POST',
     // @ts-ignore
     dispatcher: agent,
-    headers: {
-      ...HEADERS,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': sess0 ? `PHPSESSID=${sess0}` : '',
-      'Referer': `${BASE}/member/login`,
-    },
+    headers: { ...HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': `PHPSESSID=${sess0}`, 'Referer': `${BASE}/member/login` },
     body: body.toString(), redirect: 'manual', signal: AbortSignal.timeout(15000),
   });
-  const rawCookies = loginRes.headers.getSetCookie?.() ?? [loginRes.headers.get('set-cookie') ?? ''];
-  const sess1 = rawCookies.join(';').match(/PHPSESSID=([^;,]+)/)?.[1] ?? sess0;
+  const cookies = loginRes.headers.getSetCookie?.() ?? [loginRes.headers.get('set-cookie') ?? ''];
+  return cookies.join(';').match(/PHPSESSID=([^;,]+)/)?.[1] ?? sess0;
+}
 
-  // 3) 로그인 후 랭킹 페이지 접근
+export async function GET() {
+  const sess = await login();
   const rankRes = await fetch(`${BASE}/club/info/ranking/hitter?club_idx=13588`, {
     // @ts-ignore
     dispatcher: agent,
-    headers: { ...HEADERS, Cookie: `PHPSESSID=${sess1}` },
+    headers: { ...HEADERS, Cookie: `PHPSESSID=${sess}`, Referer: `${BASE}/club/info?club_idx=13588` },
     signal: AbortSignal.timeout(15000),
   });
-  const rankHtml = await rankRes.text();
-  const hasData = rankHtml.includes('left_title');
+  const html = await rankRes.text();
+
+  // 테이블 관련 클래스 찾기
+  const classes = [...html.matchAll(/class="([^"]+)"/g)]
+    .map(m => m[1])
+    .filter(c => c.includes('table') || c.includes('rank') || c.includes('list') || c.includes('title'))
+    .slice(0, 20);
+
+  // 테이블 첫 200자
+  const tIdx = html.indexOf('<table');
+  const tableSnippet = tIdx >= 0 ? html.substring(tIdx, tIdx + 400) : '테이블 없음';
 
   return NextResponse.json({
-    hasEnvVars: !!(userId && passwd),
-    loginToken: loginToken ? loginToken.slice(0, 20) + '…' : '없음',
-    loginStatus: loginRes.status,
-    cookie: sess1 ? `PHPSESSID=${sess1.slice(0, 10)}…` : '없음',
-    rankStatus: rankRes.status,
-    hasLeftTitle: hasData,
-    rankHtmlLength: rankHtml.length,
-    snippet: hasData
-      ? rankHtml.substring(rankHtml.indexOf('left_title'), rankHtml.indexOf('left_title') + 200)
-      : rankHtml.substring(rankHtml.indexOf('login_box'), rankHtml.indexOf('login_box') + 200),
+    session: sess.slice(0, 10) + '…',
+    htmlLength: html.length,
+    hasLeftTitle: html.includes('left_title'),
+    tableCount: (html.match(/<table/g) || []).length,
+    relevantClasses: [...new Set(classes)],
+    tableSnippet,
   });
 }
