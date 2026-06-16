@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// Vercel 서울(한국) 리전에서 실행 — gameone.kr 한국 IP 차단 우회
-export const preferredRegion = ['icn1', 'sin1', 'hnd1'];
 import { scrapeHitters, scrapePitchers, scrapeSchedule, scrapeTeamName, searchClubIdx } from '@/lib/scraper';
+
+export const preferredRegion = ['icn1', 'sin1', 'hnd1'];
+export const maxDuration = 60; // Vercel Pro: 최대 60초
 import {
   analyzeBatters,
   analyzePitchers,
