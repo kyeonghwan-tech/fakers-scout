@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { GameAnalysis, GameSchedule } from '@/types/baseball';
+import { GameAnalysis, GameSchedule, TeamData } from '@/types/baseball';
+import {
+  fetchHitters, fetchPitchers, fetchSchedule, searchTeamClubIdx,
+} from '@/lib/clientScraper';
+import {
+  analyzeBatters, analyzePitchers, recommendLineup, recommendDefense,
+  predictGame, analyzeTeamStrengths,
+} from '@/lib/analyzer';
 import GameHeader from '@/components/GameHeader';
 import PredictionCard from '@/components/PredictionCard';
 import BatterThreatList from '@/components/BatterThreatList';
@@ -9,49 +16,127 @@ import PitcherAnalysisList from '@/components/PitcherAnalysisList';
 import LineupCard from '@/components/LineupCard';
 import TeamStrengthCard from '@/components/TeamStrengthCard';
 
+const FAKERS_IDX = '13588';
+
 export default function HomePage() {
   const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
   const [schedule, setSchedule] = useState<GameSchedule[]>([]);
   const [selectedGameIndex, setSelectedGameIndex] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
   const [error, setError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'batters' | 'pitchers' | 'lineup'>('overview');
 
-  const fetchSchedule = useCallback(async () => {
-    try {
-      const res = await fetch('/api/schedule');
-      if (res.ok) {
-        const data = await res.json();
-        setSchedule(Array.isArray(data) ? data : []);
-      }
-    } catch {
-      // 일정 로드 실패 시 무시
-    }
-  }, []);
-
-  const fetchAnalysis = useCallback(async (gameIndex: number = 0) => {
+  const runAnalysis = useCallback(async (gameIndex: number, sched?: GameSchedule[]) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/analyze?gameIndex=${gameIndex}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '분석 실패');
-      setAnalysis(data);
+      const currentSchedule = sched ?? schedule;
+
+      setLoadingMsg('Fakers 타자 기록 수집 중…');
+      const [fakersHitters, fakersPitchers, freshSchedule] = await Promise.all([
+        fetchHitters(FAKERS_IDX),
+        fetchPitchers(FAKERS_IDX),
+        sched ? Promise.resolve(sched) : fetchSchedule(FAKERS_IDX),
+      ]);
+
+      const usedSchedule = freshSchedule ?? currentSchedule;
+      if (usedSchedule.length === 0) throw new Error('경기 일정을 찾을 수 없습니다.');
+
+      const targetGame = usedSchedule[Math.min(gameIndex, usedSchedule.length - 1)];
+
+      const fakersTeam: TeamData = {
+        clubIdx: FAKERS_IDX, name: 'Fakers', players: [],
+        hitters: fakersHitters, pitchers: fakersPitchers, schedule: usedSchedule,
+      };
+
+      // 상대팀 club_idx 검색
+      setLoadingMsg(`${targetGame.opponent} 데이터 검색 중…`);
+      let oppIdx = targetGame.opponentClubIdx;
+      if (!oppIdx && targetGame.opponent) {
+        oppIdx = await searchTeamClubIdx(targetGame.opponent).catch(() => '');
+      }
+
+      // 상대팀 데이터
+      const [oppHitters, oppPitchers] = oppIdx
+        ? await Promise.all([
+            fetchHitters(oppIdx).catch(() => []),
+            fetchPitchers(oppIdx).catch(() => []),
+          ])
+        : [[], []];
+
+      const opponentTeam: TeamData = {
+        clubIdx: oppIdx, name: targetGame.opponent || '상대팀', players: [],
+        hitters: oppHitters, pitchers: oppPitchers, schedule: [],
+      };
+
+      setLoadingMsg('전력 분석 중…');
+      const batterThreats = analyzeBatters(oppHitters);
+      const pitcherAnalysis = analyzePitchers(oppPitchers);
+      const lineupRecommendation = recommendLineup(fakersHitters);
+      const defensiveAlignment = recommendDefense(lineupRecommendation, batterThreats);
+      const { strengths: ourStr, weaknesses: ourWeak } = analyzeTeamStrengths(fakersHitters, fakersPitchers);
+      const { strengths: oppStr, weaknesses: oppWeak } = analyzeTeamStrengths(oppHitters, oppPitchers);
+
+      const defensiveNotes: string[] = [];
+      const high = batterThreats.filter(b => b.threatLevel === 'high');
+      if (high.length > 0) {
+        defensiveNotes.push(`위험 타자 ${high.length}명 집중 마크 필요`);
+        high.forEach(b => defensiveNotes.push(`${b.name}: ${b.defensiveNote}`));
+      }
+      if (batterThreats.some(b => b.reasons.some(r => r.includes('도루')))) {
+        defensiveNotes.push('도루 위협 있음 — 투수 퀵 모션 및 포수 빠른 송구 필수');
+      }
+      if (oppHitters.length === 0) {
+        defensiveNotes.push('상대팀 통계 데이터를 찾을 수 없어 분석이 제한됩니다.');
+      }
+
+      setAnalysis({
+        ourTeam: fakersTeam,
+        opponent: opponentTeam,
+        upcomingGame: targetGame,
+        batterThreats,
+        pitcherAnalysis,
+        lineupRecommendation,
+        defensiveAlignment,
+        ourTeamStrengths: ourStr,
+        ourTeamWeaknesses: ourWeak,
+        opponentStrengths: oppStr,
+        opponentWeaknesses: oppWeak,
+        defensiveNotes,
+        prediction: predictGame(fakersTeam, opponentTeam),
+      });
+
+      if (sched === undefined) setSchedule(usedSchedule);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
     } finally {
       setLoading(false);
+      setLoadingMsg('');
     }
-  }, []);
+  }, [schedule]);
 
   useEffect(() => {
-    fetchSchedule();
-    fetchAnalysis(0);
-  }, [fetchSchedule, fetchAnalysis]);
+    // 첫 로드: 일정 먼저 가져온 뒤 분석
+    (async () => {
+      setLoading(true);
+      setLoadingMsg('경기 일정 불러오는 중…');
+      try {
+        const sched = await fetchSchedule(FAKERS_IDX);
+        setSchedule(sched);
+        await runAnalysis(0, sched);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSelectGame = (index: number) => {
     setSelectedGameIndex(index);
-    fetchAnalysis(index);
+    runAnalysis(index);
   };
 
   const tabs = [
@@ -73,7 +158,7 @@ export default function HomePage() {
             </div>
           </div>
           <button
-            onClick={() => fetchAnalysis(selectedGameIndex)}
+            onClick={() => runAnalysis(selectedGameIndex)}
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
           >
@@ -122,7 +207,7 @@ export default function HomePage() {
             <div className="text-red-400 text-lg mb-2">⚠️ 데이터 수집 실패</div>
             <p className="text-gray-300 text-sm">{error}</p>
             <button
-              onClick={() => fetchAnalysis(selectedGameIndex)}
+              onClick={() => runAnalysis(selectedGameIndex)}
               className="mt-4 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm"
             >
               다시 시도
