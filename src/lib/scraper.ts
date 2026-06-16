@@ -19,19 +19,61 @@ const BASE_HEADERS = {
   'Referer': 'https://www.gameone.kr/',
 };
 
-// gameone.kr는 세션 쿠키 없이 랭킹 페이지 접근 시 메인페이지로 리다이렉트함
-// 클럽 메인 페이지를 먼저 요청해서 PHPSESSID를 받아야 함
-async function getSessionCookie(clubIdx: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`, {
+// gameone.kr 로그인 후 세션 쿠키 반환 (랭킹 페이지 접근에 필요)
+let _cachedCookie = '';
+let _cookieExpiry = 0;
+
+async function getLoginCookie(): Promise<string> {
+  if (_cachedCookie && Date.now() < _cookieExpiry) return _cachedCookie;
+
+  const userId = process.env.GAMEONE_USER_ID ?? '';
+  const passwd = process.env.GAMEONE_PASSWD ?? '';
+  if (!userId || !passwd) return '';
+
+  // 1단계: 로그인 페이지에서 CSRF token 획득
+  const loginPageRes = await fetch(`${BASE_URL}/member/login`, {
     // @ts-ignore
     dispatcher: tlsAgent,
     headers: BASE_HEADERS,
-    redirect: 'follow',
     signal: AbortSignal.timeout(15000),
   });
-  const setCookie = res.headers.get('set-cookie') ?? '';
-  const match = setCookie.match(/PHPSESSID=([^;]+)/);
-  return match ? `PHPSESSID=${match[1]}` : '';
+  const loginHtml = await loginPageRes.text();
+  const tokenMatch = loginHtml.match(/name="login_token"\s+value="([^"]+)"/);
+  const loginToken = tokenMatch?.[1] ?? '';
+  const sessionCookie = loginPageRes.headers.get('set-cookie')?.match(/PHPSESSID=([^;]+)/)?.[1] ?? '';
+
+  // 2단계: 로그인 POST
+  const body = new URLSearchParams({
+    login_token: loginToken,
+    return_url: 'https%3A%2F%2Fwww.gameone.kr%2F',
+    isPop: 'F',
+    user_id: userId,
+    passwd,
+    save_id: '',
+  });
+  const loginRes = await fetch(`${BASE_URL}/member/exec/login`, {
+    method: 'POST',
+    // @ts-ignore
+    dispatcher: tlsAgent,
+    headers: {
+      ...BASE_HEADERS,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': sessionCookie ? `PHPSESSID=${sessionCookie}` : '',
+      'Referer': `${BASE_URL}/member/login`,
+    },
+    body: body.toString(),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
+  });
+
+  // Set-Cookie에서 새 세션 쿠키 추출
+  const allCookies = loginRes.headers.getSetCookie?.() ?? [loginRes.headers.get('set-cookie') ?? ''];
+  const phpSess = allCookies.join(';').match(/PHPSESSID=([^;,]+)/)?.[1] ?? sessionCookie;
+  if (!phpSess) return '';
+
+  _cachedCookie = `PHPSESSID=${phpSess}`;
+  _cookieExpiry = Date.now() + 20 * 60 * 1000; // 20분 캐시
+  return _cachedCookie;
 }
 
 async function fetchPage(url: string, cookie?: string): Promise<string> {
@@ -56,9 +98,9 @@ async function fetchPage(url: string, cookie?: string): Promise<string> {
   }
 }
 
-// 세션 쿠키를 포함해 랭킹 페이지를 가져오는 헬퍼
+// 로그인 쿠키로 랭킹 페이지 접근
 async function fetchRankingPage(path: string, clubIdx: string): Promise<string> {
-  const cookie = await getSessionCookie(clubIdx);
+  const cookie = await getLoginCookie();
   return fetchPage(`${BASE_URL}${path}?club_idx=${clubIdx}`, cookie);
 }
 
