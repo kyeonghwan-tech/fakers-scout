@@ -51,10 +51,11 @@ export async function GET(req: NextRequest) {
     }
 
     // 상대팀 데이터 수집 (club_idx 없으면 빈 배열)
-    const [oppHitters, oppPitchers, oppName] = await Promise.all([
+    const [oppHitters, oppPitchers, oppName, oppSchedule] = await Promise.all([
       oppIdx ? scrapeHitters(oppIdx).catch(() => []) : Promise.resolve([]),
       oppIdx ? scrapePitchers(oppIdx).catch(() => []) : Promise.resolve([]),
       oppIdx ? scrapeTeamName(oppIdx).catch(() => targetGame.opponent) : Promise.resolve(targetGame.opponent || '상대팀'),
+      oppIdx ? scrapeSchedule(oppIdx).catch(() => []) : Promise.resolve([]),
     ]);
 
     const opponentTeam: TeamData = {
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
       players: [],
       hitters: oppHitters,
       pitchers: oppPitchers,
-      schedule: [],
+      schedule: oppSchedule,
     };
 
     // 분석
@@ -94,6 +95,7 @@ export async function GET(req: NextRequest) {
       opponent: opponentTeam,
       upcomingGame: targetGame,
       seasonRecord: calculateSeasonRecord(fakersSchedule),
+      opponentSeasonRecord: calculateSeasonRecord(oppSchedule),
       batterThreats,
       pitcherAnalysis,
       lineupRecommendation,

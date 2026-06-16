@@ -3,6 +3,7 @@
 import { SeasonRecord, LeagueRecord } from '@/types/baseball';
 
 interface Props {
+  teamName: string;
   overall: SeasonRecord;
   byLeague: LeagueRecord[];
 }
@@ -39,10 +40,10 @@ function WinBar({ record }: { record: SeasonRecord }) {
   );
 }
 
-export default function SeasonRecordCard({ overall, byLeague }: Props) {
+export default function SeasonRecordCard({ teamName, overall, byLeague }: Props) {
   return (
     <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-      <h2 className="text-xl font-bold text-white mb-4">🏆 이번 시즌 전적</h2>
+      <h2 className="text-lg font-bold text-white mb-4">🏆 {teamName} 시즌 전적</h2>
 
       {/* 통합 전적 */}
       <div className="mb-4">

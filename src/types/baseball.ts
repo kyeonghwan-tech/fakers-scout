@@ -146,6 +146,7 @@ export interface GameAnalysis {
   opponent: TeamData;
   upcomingGame: GameSchedule;
   seasonRecord: { overall: SeasonRecord; byLeague: LeagueRecord[] };
+  opponentSeasonRecord: { overall: SeasonRecord; byLeague: LeagueRecord[] };
   batterThreats: BatterThreat[];
   pitcherAnalysis: PitcherAnalysis[];
   lineupRecommendation: LineupRecommendation[];

@@ -157,10 +157,18 @@ export default function HomePage() {
 
             {activeTab === 'overview' && (
               <div className="space-y-6">
-                <SeasonRecordCard
-                  overall={analysis.seasonRecord.overall}
-                  byLeague={analysis.seasonRecord.byLeague}
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <SeasonRecordCard
+                    teamName="Fakers"
+                    overall={analysis.seasonRecord.overall}
+                    byLeague={analysis.seasonRecord.byLeague}
+                  />
+                  <SeasonRecordCard
+                    teamName={analysis.opponent.name}
+                    overall={analysis.opponentSeasonRecord.overall}
+                    byLeague={analysis.opponentSeasonRecord.byLeague}
+                  />
+                </div>
                 <PredictionCard
                   prediction={analysis.prediction}
                   opponentName={analysis.opponent.name}
