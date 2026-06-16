@@ -297,16 +297,25 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
     const isUpcoming = resultText.includes('대기') || resultText === '';
     const status: GameSchedule['status'] = isCompleted ? 'completed' : isUpcoming ? 'upcoming' : 'pending';
 
-    // 점수 파싱 (완료된 경기): "FAKERS 2 데몬스B 콜드승 12"
-    let score = '';
-    if (isCompleted) {
-      const scoreMatch = gameText.match(/(\d+)\s+\S+\s+(\d+)/);
-      if (scoreMatch) score = `${scoreMatch[1]} : ${scoreMatch[2]}`;
-    }
-
     // BOX SCORE 링크에서 game_idx 추출
     const boxLink = $(row).find('a').attr('href') || '';
     const gameIdxMatch = boxLink.match(/game_idx=(\d+)/);
+
+    // 승/무/패 및 점수 파싱
+    let score = '';
+    let winResult: GameSchedule['winResult'];
+    let fakersScore: number | undefined;
+    let opponentScore: number | undefined;
+
+    if (isCompleted) {
+      const parsed = parseGameResult(gameText);
+      if (parsed) {
+        fakersScore = parsed.fakersScore;
+        opponentScore = parsed.oppScore;
+        winResult = parsed.winResult;
+        score = `${fakersScore} : ${opponentScore}`;
+      }
+    }
 
     schedules.push({
       date,
@@ -314,15 +323,50 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
       league,
       stadium,
       opponent,
-      opponentClubIdx: '', // 일정 테이블에 club_idx 링크 없음 → 이름으로 검색 필요
+      opponentClubIdx: '',
       result: resultText,
       score,
       gameIdx: gameIdxMatch?.[1] || '',
       status,
+      winResult,
+      fakersScore,
+      opponentScore,
     });
   });
 
   return schedules;
+}
+
+function parseGameResult(gameText: string): {
+  fakersScore: number; oppScore: number; winResult: 'win' | 'loss' | 'draw';
+} | null {
+  // 명시적 패배
+  if (/콜드패|몰수패/.test(gameText)) {
+    const nums = [...gameText.matchAll(/\d+/g)].map(m => parseInt(m[0]));
+    if (nums.length < 2) return null;
+    const fakersScore = Math.min(nums[0], nums[nums.length - 1]);
+    const oppScore = Math.max(nums[0], nums[nums.length - 1]);
+    return { fakersScore, oppScore, winResult: 'loss' };
+  }
+
+  const matches = [...gameText.matchAll(/\d+/g)];
+  if (matches.length < 2) return null;
+
+  const first = { val: parseInt(matches[0][0]), idx: matches[0].index! };
+  const last  = { val: parseInt(matches[matches.length - 1][0]), idx: matches[matches.length - 1].index! };
+
+  const fakersPos = gameText.indexOf('FAKERS');
+  // FAKERS가 첫 번째 숫자보다 앞에 있으면 FAKERS 점수가 먼저
+  const fakersFirst = fakersPos >= 0 && fakersPos < first.idx;
+
+  const fakersScore = fakersFirst ? first.val : last.val;
+  const oppScore    = fakersFirst ? last.val  : first.val;
+
+  const winResult: 'win' | 'loss' | 'draw' =
+    fakersScore > oppScore ? 'win' :
+    fakersScore < oppScore ? 'loss' : 'draw';
+
+  return { fakersScore, oppScore, winResult };
 }
 
 function parseOpponentName(gameText: string): string {

@@ -8,7 +8,36 @@ import {
   LineupRecommendation,
   DefensiveAlignment,
   GameAnalysis,
+  SeasonRecord,
+  LeagueRecord,
 } from '@/types/baseball';
+
+export function calculateSeasonRecord(schedule: GameSchedule[]): {
+  overall: SeasonRecord;
+  byLeague: LeagueRecord[];
+} {
+  const makeRecord = (games: GameSchedule[]): SeasonRecord => {
+    const completed = games.filter(g => g.status === 'completed' && g.winResult);
+    const wins   = completed.filter(g => g.winResult === 'win').length;
+    const losses = completed.filter(g => g.winResult === 'loss').length;
+    const draws  = completed.filter(g => g.winResult === 'draw').length;
+    const gamesPlayed = wins + losses + draws;
+    return {
+      wins, losses, draws, gamesPlayed,
+      winRate: gamesPlayed > 0 ? wins / gamesPlayed : 0,
+    };
+  };
+
+  const leagues = [...new Set(schedule.map(g => g.league))];
+  const byLeague: LeagueRecord[] = leagues
+    .map(league => ({
+      league,
+      record: makeRecord(schedule.filter(g => g.league === league)),
+    }))
+    .filter(r => r.record.gamesPlayed > 0);
+
+  return { overall: makeRecord(schedule), byLeague };
+}
 
 export function analyzeBatters(hitters: HitterStats[]): BatterThreat[] {
   return hitters

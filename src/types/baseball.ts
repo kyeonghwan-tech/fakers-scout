@@ -68,6 +68,22 @@ export interface GameSchedule {
   score?: string;
   gameIdx?: string;
   status: 'upcoming' | 'completed' | 'pending';
+  winResult?: 'win' | 'loss' | 'draw';
+  fakersScore?: number;
+  opponentScore?: number;
+}
+
+export interface SeasonRecord {
+  wins: number;
+  losses: number;
+  draws: number;
+  gamesPlayed: number;
+  winRate: number;
+}
+
+export interface LeagueRecord {
+  league: string;
+  record: SeasonRecord;
 }
 
 export interface TeamData {
@@ -129,6 +145,7 @@ export interface GameAnalysis {
   ourTeam: TeamData;
   opponent: TeamData;
   upcomingGame: GameSchedule;
+  seasonRecord: { overall: SeasonRecord; byLeague: LeagueRecord[] };
   batterThreats: BatterThreat[];
   pitcherAnalysis: PitcherAnalysis[];
   lineupRecommendation: LineupRecommendation[];

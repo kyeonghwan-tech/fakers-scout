@@ -10,6 +10,7 @@ import {
   recommendDefense,
   predictGame,
   analyzeTeamStrengths,
+  calculateSeasonRecord,
 } from '@/lib/analyzer';
 import { TeamData, GameAnalysis } from '@/types/baseball';
 
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
       ourTeam: fakersTeam,
       opponent: opponentTeam,
       upcomingGame: targetGame,
+      seasonRecord: calculateSeasonRecord(fakersSchedule),
       batterThreats,
       pitcherAnalysis,
       lineupRecommendation,

@@ -8,6 +8,7 @@ import BatterThreatList from '@/components/BatterThreatList';
 import PitcherAnalysisList from '@/components/PitcherAnalysisList';
 import LineupCard from '@/components/LineupCard';
 import TeamStrengthCard from '@/components/TeamStrengthCard';
+import SeasonRecordCard from '@/components/SeasonRecordCard';
 
 export default function HomePage() {
   const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
@@ -156,6 +157,10 @@ export default function HomePage() {
 
             {activeTab === 'overview' && (
               <div className="space-y-6">
+                <SeasonRecordCard
+                  overall={analysis.seasonRecord.overall}
+                  byLeague={analysis.seasonRecord.byLeague}
+                />
                 <PredictionCard
                   prediction={analysis.prediction}
                   opponentName={analysis.opponent.name}
