@@ -6,88 +6,105 @@ const BASE_URL = 'https://www.gameone.kr';
 async function fetchPage(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': 'text/html,application/xhtml+xml',
-      'Accept-Language': 'ko-KR,ko;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
+      'Referer': 'https://www.gameone.kr/',
     },
-    next: { revalidate: 300 }, // 5분 캐시
+    next: { revalidate: 300 },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   return res.text();
 }
 
-function parseFloat2(val: string): number {
-  const n = parseFloat(val?.replace(/[^0-9.-]/g, '') || '0');
+function pf(val: string | undefined): number {
+  const n = parseFloat((val ?? '').replace(/[^0-9.-]/g, '') || '0');
   return isNaN(n) ? 0 : n;
 }
 
-function parseInt2(val: string): number {
-  const n = parseInt(val?.replace(/[^0-9-]/g, '') || '0');
+function pi(val: string | undefined): number {
+  const n = parseInt((val ?? '').replace(/[^0-9-]/g, '') || '0', 10);
   return isNaN(n) ? 0 : n;
 }
 
+// "고영일(22)" → { name: "고영일", number: "22" }
+function parseName(raw: string): { name: string; number: string } {
+  const m = raw.match(/^(.+?)\((\d+)\)$/);
+  if (m) return { name: m[1].trim(), number: m[2] };
+  return { name: raw.trim(), number: '' };
+}
+
+/**
+ * gameone.kr 타자 랭킹 페이지 구조 (td,th 기준 인덱스):
+ * [0]=순위(th) [1]=이름(번호)(th) [2]=타율 [3]=게임수 [4]=타석 [5]=타수
+ * [6]=득점 [7]=총안타 [8]=1루타 [9]=2루타 [10]=3루타 [11]=홈런
+ * [12]=루타 [13]=타점 [14]=도루 [15]=도실 [16]=희타 [17]=희비
+ * [18]=볼넷 [19]=고의4구 [20]=사구 [21]=삼진 [22]=병살
+ * [23]=장타율 [24]=출루율 [25]=도루성공률 [26]=멀티히트
+ * [27]=OPS [28]=BB/K [29]=장타/안타
+ */
 export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
   const html = await fetchPage(`${BASE_URL}/club/info/ranking/hitter?club_idx=${clubIdx}`);
   const $ = cheerio.load(html);
   const hitters: HitterStats[] = [];
 
-  $('table tbody tr').each((_, row) => {
-    const cells = $(row).find('td');
+  // left_title 테이블에 이름+통계 전체 포함
+  $('.left_title table tbody tr').each((_, row) => {
+    const cells = $(row).find('td, th').toArray();
     if (cells.length < 10) return;
 
-    const nameEl = $(cells[1]).text().trim();
-    if (!nameEl) return;
+    const cell = (i: number) => $(cells[i]).text().trim();
 
-    const numMatch = $(cells[1]).find('.num').text().trim();
-    const name = nameEl.replace(numMatch, '').trim().split('\n')[0].trim();
+    const { name, number } = parseName(cell(1));
+    if (!name) return;
 
-    const games = parseInt2($(cells[3]).text());
+    const games = pi(cell(3));
     if (games === 0) return;
 
-    const atBats = parseInt2($(cells[5]).text());
-    const hits = parseInt2($(cells[6]).text());
-    const doubles = parseInt2($(cells[8]).text());
-    const triples = parseInt2($(cells[9]).text());
-    const hr = parseInt2($(cells[10]).text());
-    const rbi = parseInt2($(cells[12]).text());
-    const runs = parseInt2($(cells[11]).text());
-    const walks = parseInt2($(cells[18]).text());
-    const so = parseInt2($(cells[21]).text());
-    const hbp = parseInt2($(cells[20]).text());
-    const sb = parseInt2($(cells[13]).text());
-    const pa = parseInt2($(cells[4]).text());
-    const tb = parseInt2($(cells[11 + 1]).text());
-    const sacH = parseInt2($(cells[15]).text());
-    const sacF = parseInt2($(cells[16]).text());
+    const ab    = pi(cell(5));
+    const hits  = pi(cell(7));
+    const dbl   = pi(cell(9));
+    const trpl  = pi(cell(10));
+    const hr    = pi(cell(11));
+    const tb    = pi(cell(12));
+    const rbi   = pi(cell(13));
+    const sb    = pi(cell(14));
+    const sacH  = pi(cell(16));
+    const sacF  = pi(cell(17));
+    const bb    = pi(cell(18));
+    const hbp   = pi(cell(20));
+    const so    = pi(cell(21));
+    const pa    = pi(cell(4));
+    const runs  = pi(cell(6));
 
-    const avg = atBats > 0 ? hits / atBats : 0;
-    const obpDenom = atBats + walks + hbp + sacF;
-    const obp = obpDenom > 0 ? (hits + walks + hbp) / obpDenom : 0;
-    const slg = atBats > 0 ? tb / atBats : 0;
+    // 사이트에서 직접 제공하는 값 사용
+    const slg = pf(cell(23));
+    const obp = pf(cell(24));
+    const ops = pf(cell(27));
 
     hitters.push({
       name,
-      number: numMatch || '?',
-      position: $(cells[2]).text().trim(),
+      number,
+      position: '',
       batSide: '',
       games,
-      atBats,
+      atBats: ab,
       plateAppearances: pa,
       hits,
-      singles: hits - doubles - triples - hr,
-      doubles,
-      triples,
+      singles: hits - dbl - trpl - hr,
+      doubles: dbl,
+      triples: trpl,
       homeRuns: hr,
       rbi,
       runs,
-      walks,
+      walks: bb,
       strikeouts: so,
       hitByPitch: hbp,
       stolenBases: sb,
-      avg,
+      avg: ab > 0 ? hits / ab : 0,
       obp,
       slg,
-      ops: obp + slg,
+      ops,
       totalBases: tb,
       sacHits: sacH,
       sacFlies: sacF,
@@ -97,60 +114,70 @@ export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
   return hitters;
 }
 
+/**
+ * gameone.kr 투수 랭킹 페이지 구조 (td,th 기준 인덱스):
+ * [0]=순위(th) [1]=이름(번호)(th) [2]=방어율 [3]=게임수 [4]=승 [5]=패
+ * [6]=세 [7]=홀드 [8]=승률 [9]=타자(BF) [10]=타수 [11]=투구수
+ * [12]=이닝 [13]=피안타 [14]=피홈런 [15]=희타 [16]=희비
+ * [17]=볼넷 [18]=고의4구 [19]=사구 [20]=탈삼진 [21]=폭투 [22]=보크
+ * [23]=실점 [24]=자책점 [25]=WHIP [26]=피안타율 [27]=탈삼진율(K/9)
+ */
 export async function scrapePitchers(clubIdx: string): Promise<PitcherStats[]> {
   const html = await fetchPage(`${BASE_URL}/club/info/ranking/pitcher?club_idx=${clubIdx}`);
   const $ = cheerio.load(html);
   const pitchers: PitcherStats[] = [];
 
-  $('table tbody tr').each((_, row) => {
-    const cells = $(row).find('td');
-    if (cells.length < 8) return;
+  $('.left_title table tbody tr').each((_, row) => {
+    const cells = $(row).find('td, th').toArray();
+    if (cells.length < 10) return;
 
-    const nameEl = $(cells[1]).text().trim();
-    if (!nameEl) return;
+    const cell = (i: number) => $(cells[i]).text().trim();
 
-    const numMatch = $(cells[1]).find('.num').text().trim();
-    const name = nameEl.replace(numMatch, '').trim().split('\n')[0].trim();
+    const { name, number } = parseName(cell(1));
+    if (!name) return;
 
-    const games = parseInt2($(cells[3]).text());
+    const games = pi(cell(3));
     if (games === 0) return;
 
-    const inningStr = $(cells[6]).text().trim();
+    // 이닝: "17.2" → 17 + 2/3 이닝
+    const inningStr = cell(12);
     const inningParts = inningStr.split('.');
-    const innings = parseInt2(inningParts[0]) + (parseInt2(inningParts[1] || '0') / 3);
+    const innings = pi(inningParts[0]) + (pi(inningParts[1] || '0') / 3);
 
-    const era = parseFloat2($(cells[2]).text());
-    const wins = parseInt2($(cells[3]).text().split('-')[0]);
-    const losses = parseInt2($(cells[3]).text().split('-')[1]);
-    const cellText = (i: number) => (cells.length > i ? $(cells[i]).text() : '0');
-    const so = parseInt2(cellText(15));
-    const bb = parseInt2(cellText(13));
-    const hits = parseInt2(cellText(10));
-    const hr = parseInt2(cellText(11));
-    const er = parseInt2(cellText(17));
-    const whip = parseFloat2(cellText(cells.length - 2));
-    const bf = parseInt2(cellText(8));
+    const era  = pf(cell(2));
+    const wins = pi(cell(4));
+    const loss = pi(cell(5));
+    const sv   = pi(cell(6));
+    const bf   = pi(cell(9));
+    const so   = pi(cell(20));
+    const bb   = pi(cell(17));
+    const hitA = pi(cell(13));
+    const hrA  = pi(cell(14));
+    const er   = pi(cell(24));
+    const whip = pf(cell(25));
+    const pitches = pi(cell(11));
 
+    // K% = SO / BF (타자 기준), K/9 = site의 탈삼진율
     const kRate = bf > 0 ? so / bf : 0;
     const bbRate = bf > 0 ? bb / bf : 0;
 
     pitchers.push({
       name,
-      number: numMatch || '?',
+      number,
       throwSide: '',
       games,
-      wins: Math.max(wins, 0),
-      losses: Math.max(losses, 0),
-      saves: 0,
+      wins,
+      losses: loss,
+      saves: sv,
       innings,
       era,
       whip,
       strikeouts: so,
       walks: bb,
-      hits,
-      homeRuns: hr,
+      hits: hitA,
+      homeRuns: hrA,
       earnedRuns: er,
-      pitches: 0,
+      pitches,
       battersFaced: bf,
       kRate,
       bbRate,
@@ -161,74 +188,91 @@ export async function scrapePitchers(clubIdx: string): Promise<PitcherStats[]> {
 }
 
 export async function scrapePlayers(clubIdx: string): Promise<Player[]> {
-  const html = await fetchPage(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`);
-  const $ = cheerio.load(html);
-  const players: Player[] = [];
-
-  $('.player-card, .player_wrap, [class*="player"]').each((_, el) => {
-    const name = $(el).find('[class*="name"], .name').first().text().trim();
-    const number = $(el).find('[class*="num"], .num').first().text().trim();
-    const position = $(el).find('[class*="pos"], .pos').first().text().trim();
-    if (name) {
-      players.push({ name, number, position, throwSide: '', batSide: '', war: 0 });
-    }
-  });
-
-  return players;
+  try {
+    const html = await fetchPage(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`);
+    const $ = cheerio.load(html);
+    const players: Player[] = [];
+    $('.player_list li, .player_item, [class*="player"]').each((_, el) => {
+      const name = $(el).find('.name, [class*="name"]').first().text().trim();
+      const number = $(el).find('.num, [class*="num"]').first().text().trim();
+      const position = $(el).find('.pos, [class*="pos"]').first().text().trim();
+      if (name) players.push({ name, number, position, throwSide: '', batSide: '', war: 0 });
+    });
+    return players;
+  } catch {
+    return [];
+  }
 }
 
+/**
+ * 일정 테이블 구조 (td 기준):
+ * [0]=일시 [1]=분류(리그) [2]=구장 [3]=게임(팀A vs 팀B 텍스트) [4]=결과
+ *
+ * 예) 08월29일(토) 16:00 | 토요리그(B) | 동작구 노량진 야구장 | FAKERS The Born | 게임대기
+ *     06월13일(토) 12:00 | 토요 마이너 | HS고촌구장 | 블루버즈 8 FAKERS 콜드승 20 | BOX SCORE
+ */
 export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
   const html = await fetchPage(`${BASE_URL}/club/info/schedule/table?club_idx=${clubIdx}`);
   const $ = cheerio.load(html);
   const schedules: GameSchedule[] = [];
 
-  $('table tbody tr, .schedule-row, [class*="game-row"]').each((_, row) => {
-    const cells = $(row).find('td');
+  $('table tbody tr').each((_, row) => {
+    const cells = $(row).find('td').toArray();
     if (cells.length < 4) return;
 
-    const dateText = $(cells[0]).text().trim();
-    const leagueText = $(cells[1]).text().trim();
-    const stadiumText = $(cells[2]).text().trim();
+    const cell = (i: number) => $(cells[i]).text().trim().replace(/\s+/g, ' ');
 
-    const opponentLink = $(row).find('a[href*="club_idx"]');
-    const opponentHref = opponentLink.attr('href') || '';
-    const opponentClubIdxMatch = opponentHref.match(/club_idx=(\d+)/);
-    const opponentClubIdx = opponentClubIdxMatch ? opponentClubIdxMatch[1] : '';
-    const opponentName = opponentLink.text().trim();
+    const rawDate    = cell(0);
+    const leagueText = cell(1);
+    const stadium    = cell(2);
+    const gameText   = cell(3);
+    const resultText = cell(4);
 
-    const gameLink = $(row).find('a[href*="game_idx"]');
-    const gameHref = gameLink.attr('href') || '';
-    const gameIdxMatch = gameHref.match(/game_idx=(\d+)/);
-    const gameIdx = gameIdxMatch ? gameIdxMatch[1] : '';
+    // 헤더 행("일시", "분류" 등) 건너뛰기
+    if (rawDate === '일시' || rawDate === '') return;
 
-    const resultText = $(row).find('[class*="result"], .result').text().trim();
-    const scoreText = $(row).find('[class*="score"], .score').text().trim();
-
-    let status: 'upcoming' | 'completed' | 'pending' = 'pending';
-    if (gameLink.text().includes('BOX')) status = 'completed';
-    else if (gameLink.text().includes('대기')) status = 'upcoming';
-
-    if (!dateText) return;
-
-    const timeMatch = dateText.match(/(\d{2}:\d{2})/);
+    // 날짜·시간 파싱: "08월29일(토) 16:00"
+    const timeMatch = rawDate.match(/(\d{2}:\d{2})/);
     const time = timeMatch ? timeMatch[1] : '';
+    const date = rawDate.replace(time, '').trim();
 
+    // 리그 분류
     const league = leagueText.includes('마이너') || leagueText.includes('HS')
       ? 'HS리그'
-      : leagueText.includes('노들') || leagueText.includes('동작') || leagueText.includes('리그B')
+      : leagueText.includes('리그B') || leagueText.includes('리그(B)') || leagueText.includes('노들') || leagueText.includes('동작')
       ? '동작 노들리그'
       : leagueText;
 
+    // 상대팀 이름 추출: "FAKERS The Born" → "The Born"
+    // "블루버즈 8 FAKERS 콜드승 20" → "블루버즈"
+    const opponent = parseOpponentName(gameText);
+
+    // 결과·상태
+    const isCompleted = resultText.includes('BOX') || resultText.includes('점') || /\d+:\d+/.test(resultText);
+    const isUpcoming = resultText.includes('대기') || resultText === '';
+    const status: GameSchedule['status'] = isCompleted ? 'completed' : isUpcoming ? 'upcoming' : 'pending';
+
+    // 점수 파싱 (완료된 경기): "FAKERS 2 데몬스B 콜드승 12"
+    let score = '';
+    if (isCompleted) {
+      const scoreMatch = gameText.match(/(\d+)\s+\S+\s+(\d+)/);
+      if (scoreMatch) score = `${scoreMatch[1]} : ${scoreMatch[2]}`;
+    }
+
+    // BOX SCORE 링크에서 game_idx 추출
+    const boxLink = $(row).find('a').attr('href') || '';
+    const gameIdxMatch = boxLink.match(/game_idx=(\d+)/);
+
     schedules.push({
-      date: dateText.replace(timeMatch?.[0] || '', '').trim(),
+      date,
       time,
       league,
-      stadium: stadiumText,
-      opponent: opponentName,
-      opponentClubIdx,
+      stadium,
+      opponent,
+      opponentClubIdx: '', // 일정 테이블에 club_idx 링크 없음 → 이름으로 검색 필요
       result: resultText,
-      score: scoreText,
-      gameIdx,
+      score,
+      gameIdx: gameIdxMatch?.[1] || '',
       status,
     });
   });
@@ -236,11 +280,50 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
   return schedules;
 }
 
+function parseOpponentName(gameText: string): string {
+  // 숫자·콜드승/패·몰수승/패 제거 후 FAKERS 제거
+  let text = gameText
+    .replace(/콜드승|콜드패|몰수승|몰수패|BOX SCORE|게임대기/g, '')
+    .replace(/\b\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // FAKERS가 앞에 있으면 뒤가 상대팀, 뒤에 있으면 앞이 상대팀
+  const parts = text.split('FAKERS').map(s => s.trim()).filter(Boolean);
+  return parts[0] || text;
+}
+
+/** 팀 이름으로 club_idx 검색 */
+export async function searchClubIdx(teamName: string): Promise<string> {
+  try {
+    const encoded = encodeURIComponent(teamName);
+    const html = await fetchPage(`${BASE_URL}/search?keyword=${encoded}&type=club`);
+    const $ = cheerio.load(html);
+    // 검색 결과에서 팀명과 club_idx 추출
+    let found = '';
+    $('a[href*="club_idx"]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const linkText = $(el).text().trim();
+      const m = href.match(/club_idx=(\d+)/);
+      if (m && linkText.includes(teamName.slice(0, 3))) {
+        found = m[1];
+        return false; // break
+      }
+    });
+    return found;
+  } catch {
+    return '';
+  }
+}
+
 export async function scrapeTeamName(clubIdx: string): Promise<string> {
   try {
     const html = await fetchPage(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`);
     const $ = cheerio.load(html);
-    return $('h1, .club-name, [class*="club_name"]').first().text().trim() || `팀 ${clubIdx}`;
+    // 페이지 타이틀이나 클럽명 추출
+    const title = $('title').text().trim();
+    if (title && title !== 'GAMEONE') return title.split('|')[0].trim().split('-')[0].trim();
+    return $('h1, .club_name, [class*="club_name"]').first().text().trim() || `팀 ${clubIdx}`;
   } catch {
     return `팀 ${clubIdx}`;
   }

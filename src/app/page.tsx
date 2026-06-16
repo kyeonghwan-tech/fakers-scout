@@ -12,7 +12,7 @@ import TeamStrengthCard from '@/components/TeamStrengthCard';
 export default function HomePage() {
   const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
   const [schedule, setSchedule] = useState<GameSchedule[]>([]);
-  const [selectedOpponent, setSelectedOpponent] = useState<string>('');
+  const [selectedGameIndex, setSelectedGameIndex] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'batters' | 'pitchers' | 'lineup'>('overview');
@@ -29,12 +29,11 @@ export default function HomePage() {
     }
   }, []);
 
-  const fetchAnalysis = useCallback(async (opponentIdx?: string) => {
+  const fetchAnalysis = useCallback(async (gameIndex: number = 0) => {
     setLoading(true);
     setError('');
     try {
-      const url = opponentIdx ? `/api/analyze?opponent=${opponentIdx}` : '/api/analyze';
-      const res = await fetch(url);
+      const res = await fetch(`/api/analyze?gameIndex=${gameIndex}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '분석 실패');
       setAnalysis(data);
@@ -47,12 +46,12 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchSchedule();
-    fetchAnalysis();
+    fetchAnalysis(0);
   }, [fetchSchedule, fetchAnalysis]);
 
-  const handleSelectGame = (game: GameSchedule) => {
-    setSelectedOpponent(game.opponentClubIdx);
-    fetchAnalysis(game.opponentClubIdx);
+  const handleSelectGame = (index: number) => {
+    setSelectedGameIndex(index);
+    fetchAnalysis(index);
   };
 
   const tabs = [
@@ -74,7 +73,7 @@ export default function HomePage() {
             </div>
           </div>
           <button
-            onClick={() => fetchAnalysis(selectedOpponent || undefined)}
+            onClick={() => fetchAnalysis(selectedGameIndex)}
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
           >
@@ -88,18 +87,23 @@ export default function HomePage() {
           <div className="mb-6">
             <div className="text-gray-400 text-xs mb-2 uppercase tracking-wide">경기 선택</div>
             <div className="flex gap-2 flex-wrap">
-              {schedule.slice(0, 8).map((game, i) => (
+              {schedule.slice(0, 10).map((game, i) => (
                 <button
                   key={i}
-                  onClick={() => handleSelectGame(game)}
-                  className={`text-xs px-3 py-2 rounded-lg border transition-colors ${
-                    selectedOpponent === game.opponentClubIdx
+                  onClick={() => handleSelectGame(i)}
+                  className={`text-xs px-3 py-2 rounded-lg border transition-colors text-left ${
+                    selectedGameIndex === i
                       ? 'bg-blue-600 border-blue-500 text-white'
                       : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400'
                   }`}
                 >
                   <div className="font-semibold">{game.opponent || '?팀'}</div>
-                  <div className="text-gray-400">{game.date} · {game.league}</div>
+                  <div className={`text-xs mt-0.5 ${selectedGameIndex === i ? 'text-blue-200' : 'text-gray-400'}`}>
+                    {game.date} · {game.league}
+                  </div>
+                  <div className={`text-xs ${selectedGameIndex === i ? 'text-blue-300' : 'text-gray-500'}`}>
+                    {game.status === 'completed' ? '✓ 완료' : game.status === 'upcoming' ? '⏰ 예정' : '📅 대기'}
+                  </div>
                 </button>
               ))}
             </div>
@@ -118,7 +122,7 @@ export default function HomePage() {
             <div className="text-red-400 text-lg mb-2">⚠️ 데이터 수집 실패</div>
             <p className="text-gray-300 text-sm">{error}</p>
             <button
-              onClick={() => fetchAnalysis(selectedOpponent || undefined)}
+              onClick={() => fetchAnalysis(selectedGameIndex)}
               className="mt-4 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm"
             >
               다시 시도
