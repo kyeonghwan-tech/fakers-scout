@@ -25,9 +25,9 @@ async function fetchPage(url: string): Promise<string> {
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} fetching ${url}`);
     return res.text();
   } catch (err) {
-    const detail = err instanceof Error
-      ? `${err.name}: ${err.message}${(err as NodeJS.ErrnoException).code ? ` (${(err as NodeJS.ErrnoException).code})` : ''}`
-      : String(err);
+    const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+    const causeInfo = cause ? ` | cause: ${cause.code ?? cause.message ?? String(cause)}` : '';
+    const detail = err instanceof Error ? `${err.name}: ${err.message}${causeInfo}` : String(err);
     throw new Error(`fetch 실패 [${url}] → ${detail}`);
   }
 }
