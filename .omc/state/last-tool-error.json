@@ -1,0 +1,7 @@
+{
+  "tool_name": "PowerShell",
+  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\Users\\\\user\\\\OneDrive\\\\문서\\\\cdl\\\\fakers-scout\\\" ; npx tsc --noEmit 2>&1 | Select-Object -First 40\",\"timeout\":60000,\"description\":\"TypeScript type check\"}",
+  "error": "Exit code 2\nsrc/lib/scraper.ts(125,26): error TS2345: Argument of type 'Cheerio<AnyNode>' is not assignable to parameter of type 'string'.\r\nsrc/lib/scraper.ts(126,26): error TS2345: Argument of type 'Cheerio<AnyNode>' is not assignable to parameter of type 'string'.\r\nsrc/lib/scraper.ts(127,28): error TS2345: Argument of type 'Cheerio<AnyNode>' is not assignable to parameter of type 'string'.\r\nsrc/lib/scraper.ts(128,26): error TS2345: Argument of type 'Cheerio<AnyNode>' is not assignable to param...",
+  "timestamp": "2026-06-16T06:22:27.837Z",
+  "retry_count": 1
+}
