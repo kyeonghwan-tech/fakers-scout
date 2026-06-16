@@ -135,8 +135,7 @@ export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
   const $ = cheerio.load(html);
   const hitters: HitterStats[] = [];
 
-  // left_title 테이블에 이름+통계 전체 포함
-  $('.left_title table tbody tr').each((_, row) => {
+  $('table.ranking_table tbody tr').each((_, row) => {
     const cells = $(row).find('td, th').toArray();
     if (cells.length < 10) return;
 
@@ -214,7 +213,7 @@ export async function scrapePitchers(clubIdx: string): Promise<PitcherStats[]> {
   const $ = cheerio.load(html);
   const pitchers: PitcherStats[] = [];
 
-  $('.left_title table tbody tr').each((_, row) => {
+  $('table.ranking_table tbody tr').each((_, row) => {
     const cells = $(row).find('td, th').toArray();
     if (cells.length < 10) return;
 
