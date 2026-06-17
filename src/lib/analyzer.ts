@@ -355,7 +355,9 @@ export function analyzeTeamStrengths(hitters: HitterStats[], pitchers: PitcherSt
 }
 
 export function analyzeOurBatters(hitters: HitterStats[]): OurBatterAnalysis[] {
-  const qualified = hitters.filter(h => h.games >= 3);
+  const maxGames = Math.max(...hitters.map(h => h.games), 1);
+  const minGames = Math.max(5, Math.floor(maxGames * 0.3)); // 최다 게임의 30% 이상
+  const qualified = hitters.filter(h => h.games >= minGames && h.atBats >= 20);
 
   return qualified.map(h => {
     const strengths: string[] = [];
@@ -436,7 +438,9 @@ export function analyzeOurBatters(hitters: HitterStats[]): OurBatterAnalysis[] {
 }
 
 export function analyzeOurPitchers(pitchers: PitcherStats[]): OurPitcherAnalysis[] {
-  const qualified = pitchers.filter(p => p.games >= 2);
+  const maxGames = Math.max(...pitchers.map(p => p.games), 1);
+  const minGames = Math.max(3, Math.floor(maxGames * 0.25)); // 최다 게임의 25% 이상
+  const qualified = pitchers.filter(p => p.games >= minGames && p.innings >= 5);
   if (qualified.length === 0) return [];
 
   // 에이스: 이닝 가장 많은 투수
