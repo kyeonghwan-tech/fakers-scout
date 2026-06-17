@@ -357,7 +357,7 @@ export function analyzeTeamStrengths(hitters: HitterStats[], pitchers: PitcherSt
 export function analyzeOurBatters(hitters: HitterStats[]): OurBatterAnalysis[] {
   const maxGames = Math.max(...hitters.map(h => h.games), 1);
   const minGames = Math.max(5, Math.floor(maxGames * 0.3)); // 최다 게임의 30% 이상
-  const qualified = hitters.filter(h => h.games >= minGames && h.atBats >= 20);
+  const qualified = hitters.filter(h => h.games >= minGames && h.atBats >= 30);
 
   return qualified.map(h => {
     const strengths: string[] = [];
@@ -381,18 +381,22 @@ export function analyzeOurBatters(hitters: HitterStats[]): OurBatterAnalysis[] {
     let battingOrderRole: OurBatterAnalysis['battingOrderRole'];
     let battingOrderNote: string;
 
-    if (h.obp >= 0.45 && h.stolenBases >= 5) {
+    const sbPerGame = h.games > 0 ? h.stolenBases / h.games : 0;
+    const rbiPerGame = h.games > 0 ? h.rbi / h.games : 0;
+    const soRate = h.atBats > 0 ? h.strikeouts / h.atBats : 0;
+
+    if (h.obp >= 0.45 && sbPerGame >= 0.5) {
       battingOrderRole = 'leadoff';
-      battingOrderNote = `리드오프 적합 — OBP ${h.obp.toFixed(3)}, 도루 ${h.stolenBases}개`;
-    } else if (h.homeRuns >= 1 || (h.games > 0 && h.rbi / h.games >= 1.0)) {
+      battingOrderNote = `리드오프 적합 — OBP ${h.obp.toFixed(3)}, 경기당 도루 ${sbPerGame.toFixed(2)}개`;
+    } else if (h.homeRuns >= 2 || rbiPerGame >= 1.0) {
       battingOrderRole = 'cleanup';
-      battingOrderNote = `클린업 적합 — HR ${h.homeRuns}개, 타점 ${h.rbi}개`;
-    } else if (h.avg >= 0.35 && (h.atBats === 0 || h.strikeouts / Math.max(h.atBats, 1) <= 0.2)) {
+      battingOrderNote = `클린업 적합 — HR ${h.homeRuns}개, 경기당 타점 ${rbiPerGame.toFixed(2)}개`;
+    } else if (h.avg >= 0.35 && soRate <= 0.2) {
       battingOrderRole = 'second';
-      battingOrderNote = `2번 적합 — 타율 ${h.avg.toFixed(3)}, 낮은 삼진율`;
-    } else if (h.games > 0 && h.rbi / h.games >= 0.8) {
+      battingOrderNote = `2번 적합 — 타율 ${h.avg.toFixed(3)}, 삼진율 ${(soRate * 100).toFixed(0)}%`;
+    } else if (rbiPerGame >= 0.7) {
       battingOrderRole = 'rbi';
-      battingOrderNote = `중심타선 적합 — 경기당 타점 ${(h.rbi / h.games).toFixed(2)}개`;
+      battingOrderNote = `중심타선 적합 — 경기당 타점 ${rbiPerGame.toFixed(2)}개`;
     } else {
       battingOrderRole = 'bottom';
       battingOrderNote = `하위 타선 — OPS ${h.ops.toFixed(3)}, 성장 가능성 있음`;
