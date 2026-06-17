@@ -98,9 +98,10 @@ async function fetchPage(url: string, cookie?: string): Promise<string> {
   }
 }
 
+export { getLoginCookie };
+
 // 로그인 쿠키로 랭킹 페이지 접근
-async function fetchRankingPage(path: string, clubIdx: string): Promise<string> {
-  const cookie = await getLoginCookie();
+async function fetchRankingPage(path: string, clubIdx: string, cookie: string): Promise<string> {
   return fetchPage(`${BASE_URL}${path}?club_idx=${clubIdx}`, cookie);
 }
 
@@ -130,8 +131,8 @@ function parseName(raw: string): { name: string; number: string } {
  * [23]=장타율 [24]=출루율 [25]=도루성공률 [26]=멀티히트
  * [27]=OPS [28]=BB/K [29]=장타/안타
  */
-export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
-  const html = await fetchRankingPage('/club/info/ranking/hitter', clubIdx);
+export async function scrapeHitters(clubIdx: string, cookie: string): Promise<HitterStats[]> {
+  const html = await fetchRankingPage('/club/info/ranking/hitter', clubIdx, cookie);
   const $ = cheerio.load(html);
   const hitters: HitterStats[] = [];
 
@@ -208,8 +209,8 @@ export async function scrapeHitters(clubIdx: string): Promise<HitterStats[]> {
  * [17]=볼넷 [18]=고의4구 [19]=사구 [20]=탈삼진 [21]=폭투 [22]=보크
  * [23]=실점 [24]=자책점 [25]=WHIP [26]=피안타율 [27]=탈삼진율(K/9)
  */
-export async function scrapePitchers(clubIdx: string): Promise<PitcherStats[]> {
-  const html = await fetchRankingPage('/club/info/ranking/pitcher', clubIdx);
+export async function scrapePitchers(clubIdx: string, cookie: string): Promise<PitcherStats[]> {
+  const html = await fetchRankingPage('/club/info/ranking/pitcher', clubIdx, cookie);
   const $ = cheerio.load(html);
   const pitchers: PitcherStats[] = [];
 
@@ -338,8 +339,13 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
     const isUpcoming = resultText.includes('대기') || resultText === '';
     const status: GameSchedule['status'] = isCompleted ? 'completed' : isUpcoming ? 'upcoming' : 'pending';
 
+    // 상대팀 club_idx: team2 div의 링크에서 추출
+    const oppLink = $(cells[3]).find('.team2 a[href*="club_idx"]').attr('href') || '';
+    const oppClubIdxMatch = oppLink.match(/club_idx=(\d+)/);
+    const opponentClubIdx = oppClubIdxMatch?.[1] || '';
+
     // BOX SCORE 링크에서 game_idx 추출
-    const boxLink = $(row).find('a').attr('href') || '';
+    const boxLink = $(row).find('a[href*="game_idx"]').attr('href') || '';
     const gameIdxMatch = boxLink.match(/game_idx=(\d+)/);
 
     // 승/무/패 및 점수 파싱
@@ -364,7 +370,7 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
       league,
       stadium,
       opponent,
-      opponentClubIdx: '',
+      opponentClubIdx,
       result: resultText,
       score,
       gameIdx: gameIdxMatch?.[1] || '',
