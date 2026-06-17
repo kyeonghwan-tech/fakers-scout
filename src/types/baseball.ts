@@ -141,6 +141,52 @@ export interface DefensiveAlignment {
   note: string;
 }
 
+export interface OurBatterAnalysis {
+  name: string;
+  number: string;
+  position: string;
+  batSide: string;
+  seasons: number;
+  games: number;
+  atBats: number;
+  avg: number;
+  obp: number;
+  slg: number;
+  ops: number;
+  stolenBases: number;
+  homeRuns: number;
+  rbi: number;
+  strikeouts: number;
+  walks: number;
+  battingOrderRole: 'leadoff' | 'second' | 'cleanup' | 'rbi' | 'bottom';
+  battingOrderNote: string;
+  defenseNote: string;
+  strengths: string[];
+  weaknesses: string[];
+}
+
+export interface OurPitcherAnalysis {
+  name: string;
+  number: string;
+  throwSide: string;
+  seasons: number;
+  games: number;
+  wins: number;
+  losses: number;
+  innings: number;
+  era: number;
+  whip: number;
+  strikeouts: number;
+  walks: number;
+  kRate: number;
+  bbRate: number;
+  role: 'ace' | 'starter' | 'reliever' | 'closer';
+  roleNote: string;
+  strengths: string[];
+  weaknesses: string[];
+  improvementTip: string;
+}
+
 export interface GameAnalysis {
   ourTeam: TeamData;
   opponent: TeamData;
@@ -165,4 +211,6 @@ export interface GameAnalysis {
     summary: string;
     keyFactors: string[];
   };
+  ourBatterAnalysis: OurBatterAnalysis[];
+  ourPitcherAnalysis: OurPitcherAnalysis[];
 }

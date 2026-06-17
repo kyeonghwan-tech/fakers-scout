@@ -9,6 +9,8 @@ import PitcherAnalysisList from '@/components/PitcherAnalysisList';
 import LineupCard from '@/components/LineupCard';
 import TeamStrengthCard from '@/components/TeamStrengthCard';
 import SeasonRecordCard from '@/components/SeasonRecordCard';
+import OurBatterCard from '@/components/OurBatterCard';
+import OurPitcherCard from '@/components/OurPitcherCard';
 
 export default function HomePage() {
   const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
@@ -16,7 +18,7 @@ export default function HomePage() {
   const [selectedGameIndex, setSelectedGameIndex] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'batters' | 'pitchers' | 'lineup'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'our-batters' | 'our-pitchers' | 'opponent' | 'lineup'>('overview');
 
   const fetchSchedule = useCallback(async () => {
     try {
@@ -57,8 +59,9 @@ export default function HomePage() {
 
   const tabs = [
     { id: 'overview' as const, label: '📊 개요' },
-    { id: 'batters' as const, label: '🔥 타자 분석' },
-    { id: 'pitchers' as const, label: '⚡ 투수 분석' },
+    { id: 'our-batters' as const, label: '🏏 우리팀 타자' },
+    { id: 'our-pitchers' as const, label: '⚡ 우리팀 투수' },
+    { id: 'opponent' as const, label: '🔥 상대 분석' },
     { id: 'lineup' as const, label: '📋 라인업' },
   ];
 
@@ -200,21 +203,32 @@ export default function HomePage() {
               </div>
             )}
 
-            {activeTab === 'batters' && (
+            {activeTab === 'our-batters' && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                <BatterThreatList
-                  batters={analysis.batterThreats}
-                  teamName={analysis.opponent.name}
-                />
+                <OurBatterCard batters={analysis.ourBatterAnalysis} />
               </div>
             )}
 
-            {activeTab === 'pitchers' && (
+            {activeTab === 'our-pitchers' && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                <PitcherAnalysisList
-                  pitchers={analysis.pitcherAnalysis}
-                  teamName={analysis.opponent.name}
-                />
+                <OurPitcherCard pitchers={analysis.ourPitcherAnalysis} />
+              </div>
+            )}
+
+            {activeTab === 'opponent' && (
+              <div className="space-y-6">
+                <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                  <BatterThreatList
+                    batters={analysis.batterThreats}
+                    teamName={analysis.opponent.name}
+                  />
+                </div>
+                <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                  <PitcherAnalysisList
+                    pitchers={analysis.pitcherAnalysis}
+                    teamName={analysis.opponent.name}
+                  />
+                </div>
               </div>
             )}
 

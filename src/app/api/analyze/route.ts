@@ -11,6 +11,8 @@ import {
   predictGame,
   analyzeTeamStrengths,
   calculateSeasonRecord,
+  analyzeOurBatters,
+  analyzeOurPitchers,
 } from '@/lib/analyzer';
 import { TeamData, GameAnalysis } from '@/types/baseball';
 
@@ -25,10 +27,10 @@ export async function GET(req: NextRequest) {
     // 로그인 1회 → 쿠키를 모든 랭킹 요청에 공유
     const cookie = await getLoginCookie();
 
-    // Fakers 데이터 + 일정 + 포지션 병렬 수집
+    // Fakers 데이터 + 일정 + 포지션 병렬 수집 (멀티시즌)
     const [fakersHittersRaw, fakersPitchers, fakersSchedule, posMap] = await Promise.all([
-      scrapeHitters(FAKERS_CLUB_IDX, cookie),
-      scrapePitchers(FAKERS_CLUB_IDX, cookie),
+      scrapeHitters(FAKERS_CLUB_IDX, cookie, [2024, 2025, 2026]),
+      scrapePitchers(FAKERS_CLUB_IDX, cookie, [2024, 2025, 2026]),
       scrapeSchedule(FAKERS_CLUB_IDX),
       scrapePlayerPositions(FAKERS_CLUB_IDX),
     ]);
@@ -98,6 +100,8 @@ export async function GET(req: NextRequest) {
     }
 
     const prediction = predictGame(fakersTeam, opponentTeam);
+    const ourBatterAnalysis = analyzeOurBatters(fakersHitters);
+    const ourPitcherAnalysis = analyzeOurPitchers(fakersPitchers);
 
     const analysis: GameAnalysis = {
       ourTeam: fakersTeam,
@@ -115,6 +119,8 @@ export async function GET(req: NextRequest) {
       opponentWeaknesses: oppWeaknesses,
       defensiveNotes,
       prediction,
+      ourBatterAnalysis,
+      ourPitcherAnalysis,
     };
 
     return NextResponse.json(analysis);

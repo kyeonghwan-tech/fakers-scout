@@ -101,8 +101,11 @@ async function fetchPage(url: string, cookie?: string): Promise<string> {
 export { getLoginCookie };
 
 // 로그인 쿠키로 랭킹 페이지 접근
-async function fetchRankingPage(path: string, clubIdx: string, cookie: string): Promise<string> {
-  return fetchPage(`${BASE_URL}${path}?club_idx=${clubIdx}`, cookie);
+async function fetchRankingPage(path: string, clubIdx: string, cookie: string, season?: number): Promise<string> {
+  const url = season
+    ? `${BASE_URL}${path}?club_idx=${clubIdx}&season=${season}`
+    : `${BASE_URL}${path}?club_idx=${clubIdx}`;
+  return fetchPage(url, cookie);
 }
 
 function pf(val: string | undefined): number {
@@ -131,8 +134,8 @@ function parseName(raw: string): { name: string; number: string } {
  * [23]=장타율 [24]=출루율 [25]=도루성공률 [26]=멀티히트
  * [27]=OPS [28]=BB/K [29]=장타/안타
  */
-export async function scrapeHitters(clubIdx: string, cookie: string): Promise<HitterStats[]> {
-  const html = await fetchRankingPage('/club/info/ranking/hitter', clubIdx, cookie);
+async function scrapeHittersSingleSeason(clubIdx: string, cookie: string, season?: number): Promise<HitterStats[]> {
+  const html = await fetchRankingPage('/club/info/ranking/hitter', clubIdx, cookie, season);
   const $ = cheerio.load(html);
   const hitters: HitterStats[] = [];
 
@@ -201,6 +204,52 @@ export async function scrapeHitters(clubIdx: string, cookie: string): Promise<Hi
   return hitters;
 }
 
+function mergeHitterSeasons(allSeasons: HitterStats[][]): HitterStats[] {
+  const map = new Map<string, HitterStats>();
+  for (const season of allSeasons) {
+    for (const h of season) {
+      const existing = map.get(h.name);
+      if (!existing) {
+        map.set(h.name, { ...h });
+      } else {
+        // 카운팅 스탯 합산
+        existing.games       += h.games;
+        existing.atBats      += h.atBats;
+        existing.plateAppearances += h.plateAppearances;
+        existing.hits        += h.hits;
+        existing.singles     += h.singles;
+        existing.doubles     += h.doubles;
+        existing.triples     += h.triples;
+        existing.homeRuns    += h.homeRuns;
+        existing.rbi         += h.rbi;
+        existing.runs        += h.runs;
+        existing.walks       += h.walks;
+        existing.strikeouts  += h.strikeouts;
+        existing.hitByPitch  += h.hitByPitch;
+        existing.stolenBases += h.stolenBases;
+        existing.totalBases  += h.totalBases;
+        existing.sacHits     += h.sacHits;
+        existing.sacFlies    += h.sacFlies;
+        // 비율 스탯 재계산
+        existing.avg = existing.atBats > 0 ? existing.hits / existing.atBats : 0;
+        const pa = existing.atBats + existing.walks + existing.hitByPitch + existing.sacFlies;
+        existing.obp = pa > 0 ? (existing.hits + existing.walks + existing.hitByPitch) / pa : 0;
+        existing.slg = existing.atBats > 0 ? existing.totalBases / existing.atBats : 0;
+        existing.ops = existing.obp + existing.slg;
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+export async function scrapeHitters(clubIdx: string, cookie: string, seasons?: number[]): Promise<HitterStats[]> {
+  const targetSeasons = seasons ?? [2024, 2025, 2026];
+  const results = await Promise.all(
+    targetSeasons.map(s => scrapeHittersSingleSeason(clubIdx, cookie, s).catch(() => [] as HitterStats[]))
+  );
+  return mergeHitterSeasons(results);
+}
+
 /**
  * gameone.kr 투수 랭킹 페이지 구조 (td,th 기준 인덱스):
  * [0]=순위(th) [1]=이름(번호)(th) [2]=방어율 [3]=게임수 [4]=승 [5]=패
@@ -209,8 +258,8 @@ export async function scrapeHitters(clubIdx: string, cookie: string): Promise<Hi
  * [17]=볼넷 [18]=고의4구 [19]=사구 [20]=탈삼진 [21]=폭투 [22]=보크
  * [23]=실점 [24]=자책점 [25]=WHIP [26]=피안타율 [27]=탈삼진율(K/9)
  */
-export async function scrapePitchers(clubIdx: string, cookie: string): Promise<PitcherStats[]> {
-  const html = await fetchRankingPage('/club/info/ranking/pitcher', clubIdx, cookie);
+async function scrapePitchersSingleSeason(clubIdx: string, cookie: string, season?: number): Promise<PitcherStats[]> {
+  const html = await fetchRankingPage('/club/info/ranking/pitcher', clubIdx, cookie, season);
   const $ = cheerio.load(html);
   const pitchers: PitcherStats[] = [];
 
@@ -244,7 +293,6 @@ export async function scrapePitchers(clubIdx: string, cookie: string): Promise<P
     const whip = pf(cell(25));
     const pitches = pi(cell(11));
 
-    // K% = SO / BF (타자 기준), K/9 = site의 탈삼진율
     const kRate = bf > 0 ? so / bf : 0;
     const bbRate = bf > 0 ? bb / bf : 0;
 
@@ -272,6 +320,45 @@ export async function scrapePitchers(clubIdx: string, cookie: string): Promise<P
   });
 
   return pitchers;
+}
+
+function mergePitcherSeasons(allSeasons: PitcherStats[][]): PitcherStats[] {
+  const map = new Map<string, PitcherStats>();
+  for (const season of allSeasons) {
+    for (const p of season) {
+      const existing = map.get(p.name);
+      if (!existing) {
+        map.set(p.name, { ...p });
+      } else {
+        existing.games       += p.games;
+        existing.wins        += p.wins;
+        existing.losses      += p.losses;
+        existing.saves       += p.saves;
+        existing.innings     += p.innings;
+        existing.strikeouts  += p.strikeouts;
+        existing.walks       += p.walks;
+        existing.hits        += p.hits;
+        existing.homeRuns    += p.homeRuns;
+        existing.earnedRuns  += p.earnedRuns;
+        existing.pitches     += p.pitches;
+        existing.battersFaced += p.battersFaced;
+        // 비율 스탯 재계산
+        existing.era  = existing.innings > 0 ? (existing.earnedRuns / existing.innings) * 9 : 0;
+        existing.whip = existing.innings > 0 ? (existing.walks + existing.hits) / existing.innings : 0;
+        existing.kRate  = existing.battersFaced > 0 ? existing.strikeouts / existing.battersFaced : 0;
+        existing.bbRate = existing.battersFaced > 0 ? existing.walks / existing.battersFaced : 0;
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+export async function scrapePitchers(clubIdx: string, cookie: string, seasons?: number[]): Promise<PitcherStats[]> {
+  const targetSeasons = seasons ?? [2024, 2025, 2026];
+  const results = await Promise.all(
+    targetSeasons.map(s => scrapePitchersSingleSeason(clubIdx, cookie, s).catch(() => [] as PitcherStats[]))
+  );
+  return mergePitcherSeasons(results);
 }
 
 const POS_KR: Record<string, string> = {

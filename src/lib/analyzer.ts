@@ -10,6 +10,8 @@ import {
   GameAnalysis,
   SeasonRecord,
   LeagueRecord,
+  OurBatterAnalysis,
+  OurPitcherAnalysis,
 } from '@/types/baseball';
 
 export function calculateSeasonRecord(schedule: GameSchedule[]): {
@@ -350,4 +352,166 @@ export function analyzeTeamStrengths(hitters: HitterStats[], pitchers: PitcherSt
   if (highKHitters.length >= 3) weaknesses.push(`삼진 많은 타자 ${highKHitters.length}명 — 초구 공략 훈련 필요`);
 
   return { strengths, weaknesses };
+}
+
+export function analyzeOurBatters(hitters: HitterStats[]): OurBatterAnalysis[] {
+  const qualified = hitters.filter(h => h.games >= 3);
+
+  return qualified.map(h => {
+    const strengths: string[] = [];
+    const weaknesses: string[] = [];
+
+    if (h.obp >= 0.4) strengths.push(`출루율 ${h.obp.toFixed(3)} — 높은 출루 능력`);
+    if (h.stolenBases >= 3) strengths.push(`도루 ${h.stolenBases}개 — 주루 위협`);
+    if (h.homeRuns >= 1) strengths.push(`홈런 ${h.homeRuns}개 — 장타력 보유`);
+    if (h.avg >= 0.35) strengths.push(`타율 ${h.avg.toFixed(3)} — 높은 컨택 능력`);
+    if (h.rbi >= 5) strengths.push(`타점 ${h.rbi}개 — 득점 생산력 우수`);
+    if (h.walks >= 5) strengths.push(`볼넷 ${h.walks}개 — 좋은 선구안`);
+    if (h.ops >= 0.8) strengths.push(`OPS ${h.ops.toFixed(3)} — 종합 타격 우수`);
+    if (strengths.length === 0) strengths.push('꾸준한 출전으로 경험 축적 중');
+
+    if (h.strikeouts >= 8) weaknesses.push(`삼진 ${h.strikeouts}개 — 삼진 감소 필요`);
+    if (h.avg < 0.2 && h.atBats >= 10) weaknesses.push(`타율 ${h.avg.toFixed(3)} — 컨택 개선 필요`);
+    if (h.obp < 0.3 && h.atBats >= 10) weaknesses.push(`출루율 ${h.obp.toFixed(3)} — 출루 빈도 향상 필요`);
+    if (weaknesses.length === 0 && h.atBats < 10) weaknesses.push('출전 경기 수 부족으로 샘플 제한');
+
+    // 타순 역할 판단
+    let battingOrderRole: OurBatterAnalysis['battingOrderRole'];
+    let battingOrderNote: string;
+
+    if (h.obp >= 0.45 && h.stolenBases >= 5) {
+      battingOrderRole = 'leadoff';
+      battingOrderNote = `리드오프 적합 — OBP ${h.obp.toFixed(3)}, 도루 ${h.stolenBases}개`;
+    } else if (h.homeRuns >= 1 || (h.games > 0 && h.rbi / h.games >= 1.0)) {
+      battingOrderRole = 'cleanup';
+      battingOrderNote = `클린업 적합 — HR ${h.homeRuns}개, 타점 ${h.rbi}개`;
+    } else if (h.avg >= 0.35 && (h.atBats === 0 || h.strikeouts / Math.max(h.atBats, 1) <= 0.2)) {
+      battingOrderRole = 'second';
+      battingOrderNote = `2번 적합 — 타율 ${h.avg.toFixed(3)}, 낮은 삼진율`;
+    } else if (h.games > 0 && h.rbi / h.games >= 0.8) {
+      battingOrderRole = 'rbi';
+      battingOrderNote = `중심타선 적합 — 경기당 타점 ${(h.rbi / h.games).toFixed(2)}개`;
+    } else {
+      battingOrderRole = 'bottom';
+      battingOrderNote = `하위 타선 — OPS ${h.ops.toFixed(3)}, 성장 가능성 있음`;
+    }
+
+    // 수비 코멘트
+    let defenseNote: string;
+    if (h.position) {
+      const posMap: Record<string, string> = {
+        'C': '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수',
+        'SS': '유격수', 'LF': '좌익수', 'CF': '중견수', 'RF': '우익수', 'P': '투수',
+      };
+      const posName = posMap[h.position] || h.position;
+      defenseNote = `${posName} 등록 — ${h.position === 'C' ? '리더십과 배터리 운용 중요' : h.position === 'SS' || h.position === '2B' ? '내야 핵심 수비 포지션' : '정규 포지션 담당'}`;
+    } else {
+      defenseNote = '포지션 미등록 — 상황에 따라 유연하게 배치';
+    }
+
+    return {
+      name: h.name,
+      number: h.number,
+      position: h.position,
+      batSide: h.batSide,
+      seasons: 1,
+      games: h.games,
+      atBats: h.atBats,
+      avg: h.avg,
+      obp: h.obp,
+      slg: h.slg,
+      ops: h.ops,
+      stolenBases: h.stolenBases,
+      homeRuns: h.homeRuns,
+      rbi: h.rbi,
+      strikeouts: h.strikeouts,
+      walks: h.walks,
+      battingOrderRole,
+      battingOrderNote,
+      defenseNote,
+      strengths: strengths.slice(0, 3),
+      weaknesses: weaknesses.slice(0, 2),
+    };
+  }).sort((a, b) => b.ops - a.ops);
+}
+
+export function analyzeOurPitchers(pitchers: PitcherStats[]): OurPitcherAnalysis[] {
+  const qualified = pitchers.filter(p => p.games >= 2);
+  if (qualified.length === 0) return [];
+
+  // 에이스: 이닝 가장 많은 투수
+  const maxInnings = Math.max(...qualified.map(p => p.innings));
+
+  return qualified.map(p => {
+    const strengths: string[] = [];
+    const weaknesses: string[] = [];
+
+    if (p.era <= 2.0) strengths.push(`방어율 ${p.era.toFixed(2)} — 최상위 수준`);
+    else if (p.era <= 3.5) strengths.push(`방어율 ${p.era.toFixed(2)} — 안정적 마운드`);
+    if (p.kRate >= 0.25) strengths.push(`삼진율 ${(p.kRate * 100).toFixed(1)}% — 강한 구위`);
+    if (p.whip <= 1.2) strengths.push(`WHIP ${p.whip.toFixed(2)} — 주자 허용 적음`);
+    if (p.wins >= 3) strengths.push(`${p.wins}승 — 승리 기여도 높음`);
+    if (p.innings >= 10) strengths.push(`${p.innings.toFixed(1)}이닝 — 이닝 소화 능력 우수`);
+    if (strengths.length === 0) strengths.push('팀 마운드 구성원으로 역할 수행 중');
+
+    if (p.era >= 6.0) weaknesses.push(`방어율 ${p.era.toFixed(2)} — 실점 억제 필요`);
+    if (p.bbRate >= 0.15) weaknesses.push(`볼넷율 ${(p.bbRate * 100).toFixed(1)}% — 제구력 개선 필요`);
+    if (p.whip >= 2.0) weaknesses.push(`WHIP ${p.whip.toFixed(2)} — 주자 허용 과다`);
+    if (weaknesses.length === 0) weaknesses.push('전반적으로 안정적, 지속 유지 필요');
+
+    // 역할 판단
+    let role: OurPitcherAnalysis['role'];
+    let roleNote: string;
+
+    if (p.saves >= 1) {
+      role = 'closer';
+      roleNote = `마무리 — 세이브 ${p.saves}개, 경기 마무리 역할`;
+    } else if (p.innings === maxInnings) {
+      role = 'ace';
+      roleNote = `에이스 — 팀 최다 ${p.innings.toFixed(1)}이닝 소화`;
+    } else if (p.games > 0 && p.innings / p.games >= 3) {
+      role = 'starter';
+      roleNote = `선발 — 경기당 평균 ${(p.innings / p.games).toFixed(1)}이닝 투구`;
+    } else {
+      role = 'reliever';
+      roleNote = `중계 — 경기당 ${(p.innings / p.games).toFixed(1)}이닝, 불펜 역할`;
+    }
+
+    // 개선 팁
+    let improvementTip: string;
+    if (p.bbRate >= 0.15) {
+      improvementTip = '볼넷 줄이기 최우선 — 제구 훈련으로 카운트 유리하게';
+    } else if (p.era >= 5.0) {
+      improvementTip = '실점 억제 집중 — 초구 스트라이크와 땅볼 유도 강화';
+    } else if (p.kRate < 0.1) {
+      improvementTip = '삼진 유도 향상 — 결정구 배구로 타자 압박 강화';
+    } else {
+      improvementTip = '현재 수준 유지 — 체력 관리와 안정적 폼 지속';
+    }
+
+    return {
+      name: p.name,
+      number: p.number,
+      throwSide: p.throwSide,
+      seasons: 1,
+      games: p.games,
+      wins: p.wins,
+      losses: p.losses,
+      innings: p.innings,
+      era: p.era,
+      whip: p.whip,
+      strikeouts: p.strikeouts,
+      walks: p.walks,
+      kRate: p.kRate,
+      bbRate: p.bbRate,
+      role,
+      roleNote,
+      strengths: strengths.slice(0, 3),
+      weaknesses: weaknesses.slice(0, 2),
+      improvementTip,
+    };
+  }).sort((a, b) => {
+    const roleOrder = { ace: 0, starter: 1, closer: 2, reliever: 3 };
+    return roleOrder[a.role] - roleOrder[b.role] || a.era - b.era;
+  });
 }
