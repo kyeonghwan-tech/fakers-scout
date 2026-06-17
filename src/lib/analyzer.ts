@@ -147,7 +147,9 @@ export function analyzePitchers(pitchers: PitcherStats[]): PitcherAnalysis[] {
 export function recommendLineup(ourHitters: HitterStats[]): LineupRecommendation[] {
   if (ourHitters.length === 0) return [];
 
-  const qualified = ourHitters.filter((h) => h.games >= 2);
+  const maxGames = Math.max(...ourHitters.map(h => h.games), 1);
+  const minGames = Math.max(5, Math.floor(maxGames * 0.3));
+  const qualified = ourHitters.filter((h) => h.games >= minGames && h.atBats >= 30);
   const scored = qualified.map((h) => ({
     hitter: h,
     score:
