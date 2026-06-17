@@ -339,10 +339,13 @@ export async function scrapeSchedule(clubIdx: string): Promise<GameSchedule[]> {
     const isUpcoming = resultText.includes('대기') || resultText === '';
     const status: GameSchedule['status'] = isCompleted ? 'completed' : isUpcoming ? 'upcoming' : 'pending';
 
-    // 상대팀 club_idx: team2 div의 링크에서 추출
-    const oppLink = $(cells[3]).find('.team2 a[href*="club_idx"]').attr('href') || '';
-    const oppClubIdxMatch = oppLink.match(/club_idx=(\d+)/);
-    const opponentClubIdx = oppClubIdxMatch?.[1] || '';
+    // 상대팀 club_idx: Fakers(clubIdx)가 아닌 팀의 링크에서 추출
+    let opponentClubIdx = '';
+    $(cells[3]).find('a[href*="club_idx"]').each((_, a) => {
+      const href = $(a).attr('href') || '';
+      const m = href.match(/club_idx=(\d+)/);
+      if (m && m[1] !== clubIdx) { opponentClubIdx = m[1]; return false; }
+    });
 
     // BOX SCORE 링크에서 game_idx 추출
     const boxLink = $(row).find('a[href*="game_idx"]').attr('href') || '';
