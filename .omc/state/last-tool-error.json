@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\Users\\\\user\\\\OneDrive\\\\문서\\\\cdl\\\\fakers-scout\\\" && npx vercel logs https://fakers-scout-johbor3np-kyeonghwan-techs-projects.vercel.app 2>&1\",\"description\":\"Get logs from failed dep...",
-  "error": "Exit code 1\n<claude-code-hint v=\"1\" type=\"plugin\" value=\"vercel@claude-plugins-official\" />\nResolving deployment \"fakers-scout-johbor3np-kyeonghwan-techs-projects.vercel.app\"\nFetching project \"prj_wc738IHze3hIFSd9y7DqY7PvWEtN\"\nError: Logs are unavailable because deployment dpl_GR7NqDf3CF9EPBE6NDqL87FmqJgX never reached READY and ended in ERROR.\nRun `vercel inspect https://fakers-scout-johbor3np-kyeonghwan-techs-projects.vercel.app` for deployment details.",
-  "timestamp": "2026-06-16T07:52:45.806Z",
-  "retry_count": 1
-}

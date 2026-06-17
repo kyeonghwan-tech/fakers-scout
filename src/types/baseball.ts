@@ -158,6 +158,14 @@ export interface OurBatterAnalysis {
   rbi: number;
   strikeouts: number;
   walks: number;
+  // 세이버메트릭스
+  woba: number;          // 가중 출루율
+  iso: number;           // 순수 장타력 (SLG - AVG)
+  babip: number;         // 인플레이 타율 (운 지수)
+  bbPct: number;         // 볼넷률
+  kPct: number;          // 삼진률
+  batterType: 'contact' | 'power' | 'speed' | 'obp' | 'balanced'; // 타자 유형
+  batterTypeLabel: string;
   battingOrderRole: 'leadoff' | 'second' | 'cleanup' | 'rbi' | 'bottom';
   battingOrderNote: string;
   defenseNote: string;
@@ -180,6 +188,12 @@ export interface OurPitcherAnalysis {
   walks: number;
   kRate: number;
   bbRate: number;
+  // 세이버메트릭스
+  fip: number;           // 수비 무관 방어율
+  k9: number;            // 9이닝당 탈삼진
+  bb9: number;           // 9이닝당 볼넷
+  kbb: number;           // K/BB 비율
+  eraMinusFip: number;   // ERA - FIP (양수=운 좋음, 음수=실력이 ERA보다 좋음)
   role: 'ace' | 'starter' | 'reliever' | 'closer';
   roleNote: string;
   strengths: string[];
