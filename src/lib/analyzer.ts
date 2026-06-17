@@ -201,7 +201,6 @@ export function recommendDefense(lineup: LineupRecommendation[], opponentBatters
     (b) => b.threatLevel === 'high' && (b.hitTendency.includes('외야') || b.hitTendency.includes('갭'))
   ).length;
 
-  const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P'];
   const notes: Record<string, string> = {
     C: '빠른 송구 준비 — 도루 저지 집중',
     '1B': '베이스 커버 및 우측 라인 수비',
@@ -214,9 +213,36 @@ export function recommendDefense(lineup: LineupRecommendation[], opponentBatters
     P: '퀵 모션 필수 — 도루 억제',
   };
 
-  return positions.map((pos, i) => ({
+  const FIELD_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P'];
+  const assigned = new Map<string, string>(); // position → player name
+  const usedPlayers = new Set<string>();
+
+  // 1단계: 등록 포지션과 일치하는 선수를 우선 배치 (타순 높을수록 우선)
+  for (const entry of lineup) {
+    const pos = entry.position;
+    if (FIELD_POSITIONS.includes(pos) && !assigned.has(pos) && !usedPlayers.has(entry.name)) {
+      assigned.set(pos, entry.name);
+      usedPlayers.add(entry.name);
+    }
+  }
+
+  // 2단계: 남은 포지션에 미배치 선수를 타순 순서대로 채움
+  const remaining = lineup.filter(e => !usedPlayers.has(e.name));
+  let ri = 0;
+  for (const pos of FIELD_POSITIONS) {
+    if (!assigned.has(pos)) {
+      while (ri < remaining.length && usedPlayers.has(remaining[ri].name)) ri++;
+      if (ri < remaining.length) {
+        assigned.set(pos, remaining[ri].name);
+        usedPlayers.add(remaining[ri].name);
+        ri++;
+      }
+    }
+  }
+
+  return FIELD_POSITIONS.map((pos) => ({
     position: pos,
-    player: lineup[i]?.name || '미정',
+    player: assigned.get(pos) || '미정',
     note: notes[pos] || '정규 위치',
   }));
 }

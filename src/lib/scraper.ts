@@ -274,6 +274,38 @@ export async function scrapePitchers(clubIdx: string, cookie: string): Promise<P
   return pitchers;
 }
 
+const POS_KR: Record<string, string> = {
+  '투수': 'P', '포수': 'C',
+  '一루수': '1B', '1루수': '1B',
+  '二루수': '2B', '2루수': '2B',
+  '三루수': '3B', '3루수': '3B',
+  '유격수': 'SS',
+  '좌익수': 'LF', '중견수': 'CF', '우익수': 'RF',
+};
+
+export async function scrapePlayerPositions(clubIdx: string): Promise<Map<string, { position: string; throwSide: string; batSide: string }>> {
+  const map = new Map<string, { position: string; throwSide: string; batSide: string }>();
+  try {
+    const html = await fetchPage(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`);
+    const $ = cheerio.load(html);
+    $('dl').each((_, dl) => {
+      const dtText = $(dl).find('dt').first().text().trim(); // "22.고영일"
+      const ddText = $(dl).find('dd').first().text().trim(); // "포수 | 우투우타"
+      const nameMatch = dtText.match(/^\d+\.(.+)$/);
+      if (!nameMatch) return;
+      const name = nameMatch[1].trim();
+      const parts = ddText.split('|').map(s => s.trim());
+      const posKr = parts[0] || '';
+      const sides = parts[1] || '';
+      const throwSide = sides.includes('좌투') ? '좌' : '우';
+      const batSide = sides.includes('좌타') ? '좌' : '우';
+      const position = POS_KR[posKr] || posKr;
+      if (name) map.set(name, { position, throwSide, batSide });
+    });
+  } catch { /* 포지션 없으면 그냥 빈 맵 */ }
+  return map;
+}
+
 export async function scrapePlayers(clubIdx: string): Promise<Player[]> {
   try {
     const html = await fetchPage(`${BASE_URL}/club/info/player?club_idx=${clubIdx}`);

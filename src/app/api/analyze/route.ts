@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeHitters, scrapePitchers, scrapeSchedule, scrapeTeamName, searchClubIdx, getLoginCookie } from '@/lib/scraper';
+import { scrapeHitters, scrapePitchers, scrapeSchedule, scrapeTeamName, searchClubIdx, getLoginCookie, scrapePlayerPositions } from '@/lib/scraper';
 
 export const preferredRegion = ['icn1', 'sin1', 'hnd1'];
 export const maxDuration = 60; // Vercel Pro: 최대 60초
@@ -25,12 +25,18 @@ export async function GET(req: NextRequest) {
     // 로그인 1회 → 쿠키를 모든 랭킹 요청에 공유
     const cookie = await getLoginCookie();
 
-    // Fakers 데이터 + 일정 병렬 수집
-    const [fakersHitters, fakersPitchers, fakersSchedule] = await Promise.all([
+    // Fakers 데이터 + 일정 + 포지션 병렬 수집
+    const [fakersHittersRaw, fakersPitchers, fakersSchedule, posMap] = await Promise.all([
       scrapeHitters(FAKERS_CLUB_IDX, cookie),
       scrapePitchers(FAKERS_CLUB_IDX, cookie),
       scrapeSchedule(FAKERS_CLUB_IDX),
+      scrapePlayerPositions(FAKERS_CLUB_IDX),
     ]);
+    // 실제 포지션 정보 병합
+    const fakersHitters = fakersHittersRaw.map(h => {
+      const p = posMap.get(h.name);
+      return p ? { ...h, position: p.position, batSide: p.batSide } : h;
+    });
 
     const fakersTeam: TeamData = {
       clubIdx: FAKERS_CLUB_IDX,
